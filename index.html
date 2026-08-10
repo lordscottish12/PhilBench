@@ -2755,9 +2755,14 @@ const _modelViewCache = new Map();  // provider+sig -> {rows, summary}
 // Fetch + cache each data bundle once; hydrate MODELS in place; invalidate the
 // derived-view caches so getModelView/getActiveData recompute with new data.
 const _fetchCache = {};
+// Stamp derived from the data payloads themselves (see data_version in
+// generate_dashboard.py). Without it a cached older data/*.json can pair with a
+// freshly deployed page, and every model added since resolves to undefined.
+const DATA_VERSION = "204104fd5292";
 function _fetchJson(path) {
   if (!_fetchCache[path]) {
-    _fetchCache[path] = fetch(path).then(r => {
+    const url = DATA_VERSION ? path + "?v=" + DATA_VERSION : path;
+    _fetchCache[path] = fetch(url).then(r => {
       if (!r.ok) throw new Error(path + ": HTTP " + r.status);
       return r.json();
     });
@@ -6407,13 +6412,23 @@ if (LAZY) {
   _fetchJson("data/core.json")
     .then(core => { _hydrateCore(core); _boot(); })
     .catch(err => {
+      // Two very different causes, so don't give one message for both. Opening
+      // the file directly can never work (fetch is blocked under file://); on a
+      // served page the usual cause is a cached data file left over from an
+      // earlier deploy, which a hard refresh clears.
+      const isFile = window.location.protocol === "file:";
+      const advice = isFile
+        ? 'This dashboard cannot be opened directly from a file; it has to be '
+          + 'served over HTTP. From the folder containing this page run '
+          + '<code>python -m http.server 8000</code> and open '
+          + '<code>http://localhost:8000/</code>.'
+        : 'Try a hard refresh (<code>Ctrl+F5</code>, or <code>Cmd+Shift+R</code> '
+          + 'on a Mac). A data file cached from an earlier version of this page '
+          + 'is the usual cause, and it clears within a few minutes on its own.';
       document.body.insertAdjacentHTML("afterbegin",
         '<div style="padding:1rem;margin:1rem;background:#fef2f2;color:#991b1b;'
         + 'border:1px solid #fecaca;border-radius:8px;font-family:monospace">'
-        + 'Failed to load dashboard data (' + err + ').<br>This dashboard must be '
-        + 'served over HTTP. From the results/ folder run '
-        + '<code>python -m http.server 8000</code> and open '
-        + '<code>http://localhost:8000/philsurvey.html</code>.</div>');
+        + 'Failed to load dashboard data (' + err + ').<br>' + advice + '</div>');
     });
 } else {
   _boot();
