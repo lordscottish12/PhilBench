@@ -4643,18 +4643,12 @@ function _attachVariantTrendTooltips() {
     const value = t.getAttribute("data-value") || "";
     _vtTip.innerHTML = `<div class="ttm-model">${escHtml(model)}</div><div class="ttm-meta">${escHtml(vid)} - ${escHtml(date)} - ${escHtml(value)}</div>`;
     _vtTip.style.display = "block";
+    placeMiniTip(_vtTip, ...miniTipAnchor(t, e));
   };
   container.onmousemove = (e) => {
     const t = e.target;
     if (!t || !t.classList || !t.classList.contains("vt-trend-dot")) return;
-    const pad = 12;
-    const rect = _vtTip.getBoundingClientRect();
-    let x = e.clientX + pad;
-    let y = e.clientY + pad;
-    if (x + rect.width > window.innerWidth - 8) x = e.clientX - rect.width - pad;
-    if (y + rect.height > window.innerHeight - 8) y = e.clientY - rect.height - pad;
-    _vtTip.style.left = `${x}px`;
-    _vtTip.style.top = `${y}px`;
+    placeMiniTip(_vtTip, ...miniTipAnchor(t, e));
   };
   container.onmouseout = (e) => {
     const t = e.target;
@@ -6054,6 +6048,7 @@ function updateTrends() {
       if (!data) return;
       trendTip.innerHTML = `<div class="ttm-model">${escHtml(data.label)} fit</div><div class="ttm-meta">${escHtml(data.date)} - ${data.pct.toFixed(1)}%</div>`;
       trendTip.style.display = "block";
+      placeMiniTip(trendTip, ...miniTipAnchor(t, e));
       return;
     }
     if (!t || !t.classList || !t.classList.contains("trend-mini-dot")) return;
@@ -6062,6 +6057,7 @@ function updateTrends() {
     const pct = t.getAttribute("data-pct") || "";
     trendTip.innerHTML = `<div class="ttm-model">${escHtml(model)}</div><div class="ttm-meta">${escHtml(date)} - ${escHtml(pct)}%</div>`;
     trendTip.style.display = "block";
+    placeMiniTip(trendTip, ...miniTipAnchor(t, e));
   };
   grid.onmousemove = (e) => {
     const t = e.target;
@@ -6073,14 +6069,7 @@ function updateTrends() {
         trendTip.innerHTML = `<div class="ttm-model">${escHtml(data.label)} fit</div><div class="ttm-meta">${escHtml(data.date)} - ${data.pct.toFixed(1)}%</div>`;
       }
     }
-    const pad = 12;
-    const rect = trendTip.getBoundingClientRect();
-    let x = e.clientX + pad;
-    let y = e.clientY + pad;
-    if (x + rect.width > window.innerWidth - 8) x = e.clientX - rect.width - pad;
-    if (y + rect.height > window.innerHeight - 8) y = e.clientY - rect.height - pad;
-    trendTip.style.left = `${x}px`;
-    trendTip.style.top = `${y}px`;
+    placeMiniTip(trendTip, ...miniTipAnchor(t, e));
   };
   grid.onmouseout = (e) => {
     const t = e.target;
@@ -6191,7 +6180,7 @@ function updateCapabilityTrends() {
   const fitTip = (t, e) => {
     const svg = t.closest("svg");
     const dd = svg ? trendFitTooltipData(t, svgEventPoint(svg, e).x) : null;  // ignore dd.date (x is index here)
-    if (dd) { tip.innerHTML = `<div class="ttm-model">${escHtml(dd.label)} fit</div><div class="ttm-meta">${dd.pct.toFixed(1)}% of answers</div>`; tip.style.display = "block"; }
+    if (dd) { tip.innerHTML = `<div class="ttm-model">${escHtml(dd.label)} fit</div><div class="ttm-meta">${dd.pct.toFixed(1)}% of answers</div>`; tip.style.display = "block"; placeMiniTip(tip, ...miniTipAnchor(t, e)); }
   };
   grid.onmouseover = (e) => {
     const t = e.target;
@@ -6200,16 +6189,13 @@ function updateCapabilityTrends() {
     const recon = t.getAttribute("data-recon") ? " (reconstructed)" : "";
     tip.innerHTML = `<div class="ttm-model">${escHtml(t.getAttribute("data-model") || "")}</div><div class="ttm-meta">index ${escHtml(t.getAttribute("data-idx") || "")}${recon} — ${escHtml(t.getAttribute("data-pct") || "")}%</div>`;
     tip.style.display = "block";
+    placeMiniTip(tip, ...miniTipAnchor(t, e));
   };
   grid.onmousemove = (e) => {
     const t = e.target;
     if (!t || !t.classList || !(t.classList.contains("trend-mini-dot") || t.classList.contains("trend-mini-fit"))) return;
     if (t.classList.contains("trend-mini-fit")) fitTip(t, e);
-    const pad = 12, rect = tip.getBoundingClientRect();
-    let x = e.clientX + pad, y = e.clientY + pad;
-    if (x + rect.width > window.innerWidth - 8) x = e.clientX - rect.width - pad;
-    if (y + rect.height > window.innerHeight - 8) y = e.clientY - rect.height - pad;
-    tip.style.left = `${x}px`; tip.style.top = `${y}px`;
+    placeMiniTip(tip, ...miniTipAnchor(t, e));
   };
   grid.onmouseout = (e) => {
     const t = e.target;
@@ -6656,16 +6642,56 @@ function setQuestionTrendX(id, mode) {
 // one, slide it horizontally back inside the viewport (8px margin). Repeat a
 // few times: a box squeezed against its container's edge widens once moved,
 // which can push it past the edge again (seen in the All Questions table).
+// The part of the page actually on screen, in getBoundingClientRect()
+// coordinates. On phones the layout viewport can be much larger than the
+// screen (wide content), and the visible window (visualViewport) sits at an
+// offset inside it, so clamp against that window, not 0..clientWidth.
+function visibleBox() {
+  const v = window.visualViewport;
+  if (v) return { left: v.offsetLeft, top: v.offsetTop, right: v.offsetLeft + v.width, bottom: v.offsetTop + v.height };
+  const d = document.documentElement;
+  return { left: 0, top: 0, right: d.clientWidth, bottom: d.clientHeight };
+}
+
 function keepTooltipInView(tip) {
-  const m = 8, vw = document.documentElement.clientWidth;
+  const m = 8, vb = visibleBox();
   for (let pass = 0; pass < 3; pass++) {
     const r = tip.getBoundingClientRect();
     let dx = 0;
-    if (r.right > vw - m) dx = (vw - m) - r.right;
-    if (r.left + dx < m) dx = m - r.left;
+    if (r.right > vb.right - m) dx = (vb.right - m) - r.right;
+    if (r.left + dx < vb.left + m) dx = (vb.left + m) - r.left;
     if (Math.abs(dx) < 0.5) break;
     tip.style.left = (parseFloat(tip.style.left) + dx) + "px";
   }
+}
+
+// Place a position:fixed mini pop-up next to an anchor point (in
+// getBoundingClientRect() coordinates) and keep it inside the visible window.
+// window.innerWidth is no use on phones (it is the layout width, wider than
+// the screen when the page has wide content); we clamp to visibleBox()
+// instead, and measure where (0,0) lands so any offset between fixed-position
+// and client coordinates is corrected.
+function placeMiniTip(tip, ax, ay) {
+  const m = 8, pad = 12, vb = visibleBox();
+  tip.style.left = "0px"; tip.style.top = "0px";
+  const o = tip.getBoundingClientRect();
+  let x = ax + pad, y = ay + pad;
+  if (x + o.width > vb.right - m) x = ax - o.width - pad;
+  if (x < vb.left + m) x = Math.max(vb.left + m, Math.min(vb.right - m - o.width, ax - o.width / 2));
+  if (y + o.height > vb.bottom - m) y = ay - o.height - pad;
+  if (y < vb.top + m) y = vb.top + m;
+  tip.style.left = (x - o.left) + "px";
+  tip.style.top = (y - o.top) + "px";
+}
+
+// Anchor for a mini pop-up: the dot's centre (robust to how a tap is
+// reported), else the pointer position (fit lines follow the pointer).
+function miniTipAnchor(t, e) {
+  if (t && t.tagName && t.tagName.toLowerCase() === "circle") {
+    const r = t.getBoundingClientRect();
+    return [r.left + r.width / 2, r.top + r.height / 2];
+  }
+  return [e.clientX, e.clientY];
 }
 
 function wireTrendTooltips(container) {
